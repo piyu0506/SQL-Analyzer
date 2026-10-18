@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b30">
+  <title>SQL Query Security Analyzer and Optimizer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="SQL Compiler Lab home">
+      <span class="brand-mark">&lt;/&gt;</span>
+      <span>Compiler<span class="brand-light">Lab</span></span>
+    </a>
+    <span class="course-tag">PRINCIPLES OF COMPILER DESIGN</span>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero">
+      <div class="eyebrow"><span class="eyebrow-dot"></span> INTERACTIVE COMPILER PLAYGROUND</div>
+      <h1>SQL Query <span>Security Analyzer</span></h1>
+      <p>Trace a query through the compiler pipeline. Inspect its tokens, syntax tree, schema checks, security signals and safe optimizations.</p>
+    </section>
+
+    <section class="workspace-card" aria-labelledby="editor-heading">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">01 / QUERY INPUT</div>
+          <h2 id="editor-heading">Write a SQL query</h2>
+        </div>
+        <span class="schema-hint">Sample schema: <b>users</b> · <b>orders</b></span>
+      </div>
+      <div class="samples" aria-label="Load a sample query">
+        <button class="sample-button" type="button" data-sample="valid">Valid query</button>
+        <button class="sample-button" type="button" data-sample="syntax">Syntax error</button>
+        <button class="sample-button" type="button" data-sample="schema">Unknown column</button>
+        <button class="sample-button" type="button" data-sample="security">Tautology warning</button>
+        <button class="sample-button" type="button" data-sample="optimize">Optimize query</button>
+      </div>
+      <label class="sr-only" for="query-input">SQL query</label>
+      <div class="editor-wrap">
+        <div class="editor-gutter" aria-hidden="true"><span>SQL</span><span id="line-count">1 line</span></div>
+        <textarea id="query-input" spellcheck="false" autocapitalize="off" autocomplete="off"
+          placeholder="SELECT username, age&#10;FROM users&#10;WHERE age >= 18 AND TRUE;"
+          aria-describedby="editor-help"></textarea>
+      </div>
+      <div class="editor-footer">
+        <p id="editor-help">Read-only analysis · SQL is never executed against a database.</p>
+        <div class="editor-actions">
+          <button class="button button-secondary" id="reset-button" type="button">Reset</button>
+          <button class="button button-primary" id="analyze-button" type="button">
+            <span class="button-icon" aria-hidden="true">▶</span> Analyze query
+          </button>
+        </div>
+      </div>
+      <p id="request-error" class="request-error" role="alert" hidden></p>
+    </section>
+
+    <section class="pipeline-card" aria-labelledby="pipeline-heading">
+      <div class="section-heading compact-heading">
+        <div>
+          <div class="eyebrow">02 / COMPILER PIPELINE</div>
+          <h2 id="pipeline-heading">Analysis stages</h2>
+        </div>
+        <span id="run-label" class="run-label">Awaiting query</span>
+      </div>
+      <div id="pipeline-status" class="pipeline-status" aria-live="polite">
+        <div class="stage" data-stage="lexical_analysis"><span class="stage-number">01</span><span class="stage-name">Lexical analysis</span><span class="stage-state">Waiting</span></div>
+        <div class="stage" data-stage="syntax_analysis"><span class="stage-number">02</span><span class="stage-name">Syntax analysis</span><span class="stage-state">Waiting</span></div>
+        <div class="stage" data-stage="semantic_analysis"><span class="stage-number">03</span><span class="stage-name">Semantic analysis</span><span class="stage-state">Waiting</span></div>
+        <div class="stage" data-stage="security_analysis"><span class="stage-number">04</span><span class="stage-name">Security analysis</span><span class="stage-state">Waiting</span></div>
+        <div class="stage" data-stage="optimization"><span class="stage-number">05</span><span class="stage-name">AST optimization</span><span class="stage-state">Waiting</span></div>
+      </div>
+    </section>
+
+    <section class="results-card" aria-labelledby="results-heading">
+      <div class="section-heading compact-heading results-title">
+        <div>
+          <div class="eyebrow">03 / COMPILER OUTPUT</div>
+          <h2 id="results-heading">Inspect the results</h2>
+        </div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Analysis results">
+        <button class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-overview" id="tab-overview" data-tab="overview">Overview</button>
+        <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-tokens" id="tab-tokens" data-tab="tokens">Tokens <span id="token-count" class="tab-count">—</span></button>
+        <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-ast" id="tab-ast" data-tab="ast">AST</button>
+        <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-analysis" id="tab-analysis" data-tab="analysis">Semantic &amp; security</button>
+        <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-optimization" id="tab-optimization" data-tab="optimization">Optimization</button>
+      </div>
+
+      <div class="tab-panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div id="overview-message" class="empty-state">
+          <span class="empty-icon" aria-hidden="true">{ }</span>
+          <h3>Ready to analyze</h3>
+          <p>Enter a query or choose a sample above to see the real compiler stages in action.</p>
+        </div>
+        <div id="overview-errors" class="error-list" hidden></div>
+        <div id="sql-comparison" class="sql-comparison" hidden>
+          <article class="sql-result">
+            <div class="result-label"><span>INPUT</span><span>Original SQL</span></div>
+            <pre id="original-sql"></pre>
+          </article>
+          <article class="sql-result optimized-result">
+            <div class="result-label"><span>OUTPUT</span><span>Optimized SQL</span></div>
+            <pre id="optimized-sql"></pre>
+          </article>
+        </div>
+        <p class="disclaimer">Security indicators identify patterns for review; they do not prove an SQL injection. Use parameterized queries in applications.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-tokens" role="tabpanel" aria-labelledby="tab-tokens" hidden>
+        <div class="table-scroll"><table><thead><tr><th>Type</th><th>Value</th><th>Line</th><th>Column</th></tr></thead><tbody id="token-rows"></tbody></table></div>
+        <p id="token-empty" class="muted" hidden>No tokens were produced.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-ast" role="tabpanel" aria-labelledby="tab-ast" hidden>
+        <p class="panel-intro">This tree is built from the recursive-descent parser's AST, not from text matching.</p>
+        <div id="ast-tree" class="ast-tree"><p class="muted">A valid SELECT statement will appear here.</p></div>
+      </div>
+
+      <div class="tab-panel" id="panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden>
+        <div class="analysis-columns">
+          <section><h3>Schema &amp; semantic checks</h3><div id="semantic-results" class="finding-list"><p class="muted">Run an analysis to check table and column references.</p></div></section>
+          <section><h3>Security findings</h3><div id="security-results" class="finding-list"><p class="muted">Run an analysis to inspect security patterns.</p></div></section>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-optimization" role="tabpanel" aria-labelledby="tab-optimization" hidden>
+        <h3>Applied optimization rules</h3>
+        <div id="optimization-results" class="rule-list"><p class="muted">Rules are reported only when a transformation is applied.</p></div>
+        <p class="disclaimer">The optimizer simplifies the supported AST; it does not claim measured runtime improvements.</p>
+      </div>
+    </section>
+
+    <footer class="page-footer">
+      <span>Built to demonstrate compiler design: lexing → parsing → semantic checks → analysis → optimization.</span>
+      <span>Local sample schema · No database connection</span>
+    </footer>
+  </main>
+</body>
+</html>
