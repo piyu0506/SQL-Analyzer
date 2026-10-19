@@ -16,9 +16,11 @@ def analyze_query(query):
         "security_findings": [],
         "optimized_sql": None,
         "optimization_explanations": [],
+        "overall_status": "pending",
         "pipeline_status": {
             "lexical_analysis": "pending",
             "syntax_analysis": "pending",
+            "ast_construction": "pending",
             "semantic_analysis": "pending",
             "security_analysis": "pending",
             "optimization": "pending",
@@ -35,9 +37,11 @@ def analyze_query(query):
         }
         response["pipeline_status"].update({
             "lexical_analysis": "failed", "syntax_analysis": "blocked",
+            "ast_construction": "blocked",
             "semantic_analysis": "blocked", "security_analysis": "blocked",
             "optimization": "blocked",
         })
+        response["overall_status"] = "lexical_error"
         return response
 
     statement = None
@@ -45,18 +49,21 @@ def analyze_query(query):
         statement = parse(tokens)
         response["parse_tree"] = statement.to_dict()
         response["pipeline_status"]["syntax_analysis"] = "passed"
+        response["pipeline_status"]["ast_construction"] = "passed"
     except ParseError as error:
         response["errors"]["syntax"] = {
             "message": error.message, "line": error.line, "column": error.column,
         }
         response["pipeline_status"].update({
-            "syntax_analysis": "failed", "semantic_analysis": "blocked",
+            "syntax_analysis": "failed", "ast_construction": "failed",
+            "semantic_analysis": "blocked",
             "optimization": "blocked",
         })
 
     response["security_findings"] = analyze_security(tokens, statement)
     response["pipeline_status"]["security_analysis"] = "passed"
     if statement is None:
+        response["overall_status"] = "syntax_error"
         return response
 
     semantics = analyze_semantics(statement)
@@ -65,8 +72,13 @@ def analyze_query(query):
     response["pipeline_status"]["semantic_analysis"] = (
         "passed" if semantics["valid"] else "failed"
     )
+    if not semantics["valid"]:
+        response["pipeline_status"]["optimization"] = "blocked"
+        response["overall_status"] = "semantic_error"
+        return response
     optimized, rules = optimize(statement)
     response["optimized_sql"] = generate(optimized)
     response["optimization_explanations"] = rules
     response["pipeline_status"]["optimization"] = "passed"
+    response["overall_status"] = "passed"
     return response

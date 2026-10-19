@@ -7,48 +7,53 @@ const samples = {
 };
 
 const input = document.querySelector("#query-input");
+const exampleQuery = document.querySelector("#example-query");
 const analyzeButton = document.querySelector("#analyze-button");
-const resetButton = document.querySelector("#reset-button");
+const clearButton = document.querySelector("#reset-button");
 const requestError = document.querySelector("#request-error");
 
 input.value = samples.valid;
 updateLineCount();
 
-document.querySelectorAll("[data-sample]").forEach((button) => {
-  button.addEventListener("click", () => {
-    input.value = samples[button.dataset.sample];
-    updateLineCount();
-    input.focus();
-  });
-});
-
-input.addEventListener("input", updateLineCount);
-resetButton.addEventListener("click", () => {
-  input.value = "";
+exampleQuery.addEventListener("change", () => {
+  const query = samples[exampleQuery.value];
+  if (!query) return;
+  input.value = query;
   updateLineCount();
-  requestError.hidden = true;
+  markReportStale("Example loaded · click Analyze Query");
   input.focus();
 });
-analyzeButton.addEventListener("click", runAnalysis);
 
-document.querySelectorAll(".tab-button").forEach((button) => {
-  button.addEventListener("click", () => activateTab(button.dataset.tab));
+input.addEventListener("input", () => {
+  updateLineCount();
+  markReportStale("Query changed · click Analyze Query");
 });
+
+clearButton.addEventListener("click", () => {
+  input.value = "";
+  exampleQuery.value = "";
+  requestError.hidden = true;
+  updateLineCount();
+  markReportStale("Awaiting query");
+  input.focus();
+});
+
+analyzeButton.addEventListener("click", runAnalysis);
 
 function updateLineCount() {
   const count = input.value.split("\n").length;
-  document.querySelector("#line-count").textContent = `${count} ${count === 1 ? "line" : "lines"}`;
+  document.querySelector("#line-count").textContent =
+    `${count} ${count === 1 ? "line" : "lines"}`;
 }
 
-function activateTab(name) {
-  document.querySelectorAll(".tab-button").forEach((button) => {
-    const active = button.dataset.tab === name;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", String(active));
-  });
-  document.querySelectorAll(".tab-panel").forEach((panel) => {
-    panel.hidden = panel.id !== `panel-${name}`;
-  });
+function setRunLabel(message) {
+  document.querySelector("#run-label").textContent = message;
+}
+
+function markReportStale(message) {
+  document.querySelector("#analysis-report").hidden = true;
+  document.querySelector("#overview-message").hidden = false;
+  setRunLabel(message);
 }
 
 async function runAnalysis() {
@@ -59,7 +64,7 @@ async function runAnalysis() {
     return;
   }
   analyzeButton.disabled = true;
-  analyzeButton.textContent = "Analyzing…";
+  analyzeButton.textContent = "Running pipeline…";
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -69,66 +74,136 @@ async function runAnalysis() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
     renderResults(result, input.value);
-    activateTab("overview");
-    document.querySelector("#run-label").textContent = "Analysis complete";
+    setRunLabel(overallStatusLabel(result.overall_status));
+    document.querySelector("#analysis-report").scrollIntoView({
+      behavior: "smooth", block: "start"
+    });
   } catch (error) {
     requestError.textContent = error.message || "Could not connect to the analyzer.";
     requestError.hidden = false;
   } finally {
     analyzeButton.disabled = false;
-    analyzeButton.innerHTML = '<span class="button-icon" aria-hidden="true">▶</span> Analyze query';
+    analyzeButton.innerHTML =
+      '<span class="button-icon" aria-hidden="true">▶</span> Analyze Query';
   }
 }
 
+function overallStatusLabel(status) {
+  const labels = {
+    passed: "PASS · all applicable stages completed",
+    lexical_error: "ERROR · lexical analysis failed",
+    syntax_error: "ERROR · syntax analysis failed",
+    semantic_error: "INVALID · semantic validation failed"
+  };
+  return labels[status] || "Analysis complete";
+}
+
 function renderResults(result, original) {
-  renderPipeline(result.pipeline_status);
-  renderErrors(result.errors);
-  document.querySelector("#original-sql").textContent = original;
-  document.querySelector("#optimized-sql").textContent =
-    result.optimized_sql ?? "Not generated: the query has a syntax error.";
-  document.querySelector("#sql-comparison").hidden = false;
+  const statuses = result.pipeline_status || {};
+  document.querySelector("#analysis-report").hidden = false;
   document.querySelector("#overview-message").hidden = true;
-  renderTokens(result.tokens || []);
-  renderAst(result.parse_tree);
-  renderSemantics(result.semantic_analysis);
-  renderSecurity(result.security_findings || []);
-  renderRules(result.optimization_explanations || []);
+  renderOverallStatus(result.overall_status, statuses);
+  renderPipeline(statuses);
+  renderSyntaxResults(result.errors, statuses);
+  renderTokens(result.tokens || [], statuses);
+  renderAst(result.parse_tree, statuses);
+  renderSemantics(result.semantic_analysis, statuses);
+  renderSecurity(result.security_findings || [], statuses);
+  renderRules(
+    result.optimization_explanations || [],
+    statuses,
+    result.semantic_analysis
+  );
+  renderSqlComparison(result, original, statuses);
+}
+
+function renderOverallStatus(overallStatus, statuses) {
+  const container = document.querySelector("#overall-status");
+  container.replaceChildren();
+  const label = document.createElement("strong");
+  label.className = overallStatus === "passed" ? "semantic-good" : "semantic-bad";
+  label.textContent = overallStatusLabel(overallStatus);
+  container.append(label);
+  if (overallStatus !== "passed") {
+    const explanation = document.createElement("p");
+    explanation.className = "muted";
+    explanation.textContent = getFailureSummary(overallStatus, statuses);
+    container.append(explanation);
+  }
+}
+
+function getFailureSummary(status, statuses) {
+  if (status === "lexical_error") {
+    return "The lexer could not produce a complete token stream. Later parsing and validation stages were not run.";
+  }
+  if (status === "syntax_error") {
+    return "No valid AST was produced. Semantic analysis and optimization were not run; independent security checks were still performed.";
+  }
+  if (status === "semantic_error") {
+    return "The query parsed successfully, but schema or type checks failed. Security checks were performed; optimization was withheld.";
+  }
+  if (statuses.optimization === "blocked") {
+    return "Optimization was blocked because its required validation stages did not pass.";
+  }
+  return "Review the stage results below.";
 }
 
 function renderPipeline(statuses) {
   document.querySelectorAll(".stage").forEach((stage) => {
     const status = statuses[stage.dataset.stage] || "pending";
     stage.dataset.status = status;
-    stage.querySelector(".stage-state").textContent =
-      status.charAt(0).toUpperCase() + status.slice(1);
+    stage.querySelector(".stage-state").textContent = status.toUpperCase();
   });
 }
 
-function renderErrors(errors) {
-  const container = document.querySelector("#overview-errors");
+function stageLabel(status) {
+  return {
+    passed: "PASS",
+    failed: "ERROR",
+    blocked: "NOT RUN",
+    pending: "NOT RUN"
+  }[status] || status.toUpperCase();
+}
+
+function renderSyntaxResults(errors, statuses) {
+  const container = document.querySelector("#syntax-results");
   container.replaceChildren();
-  const entries = [];
-  for (const [stage, error] of Object.entries(errors || {})) {
-    if (Array.isArray(error)) {
-      error.forEach((message) => entries.push([stage, message]));
-    } else if (error) {
-      entries.push([stage, `${error.message} (line ${error.line}, column ${error.column})`]);
-    }
-  }
-  entries.forEach(([stage, message]) => {
+  const stages = [
+    ["Lexical analysis", statuses.lexical_analysis],
+    ["Syntax", statuses.syntax_analysis],
+    ["AST construction", statuses.ast_construction]
+  ];
+  stages.forEach(([name, status]) => {
+    const summary = document.createElement("p");
+    summary.className = status === "passed" ? "semantic-good" :
+      status === "failed" ? "semantic-bad" : "muted";
+    summary.textContent = `${name}: ${stageLabel(status)}`;
+    container.append(summary);
+  });
+  [
+    ["Lexical error", errors?.lexical],
+    ["Syntax error", errors?.syntax]
+  ].forEach(([stage, error]) => {
+    if (!error) return;
     const item = document.createElement("div");
     item.className = "error-item";
-    item.textContent = `${stage.toUpperCase()}: ${message}`;
+    item.textContent =
+      `${stage}: ${error.message} (line ${error.line}, column ${error.column})`;
     container.append(item);
   });
-  container.hidden = entries.length === 0;
+  if (!errors?.lexical && !errors?.syntax &&
+      statuses.lexical_analysis === "passed" &&
+      statuses.syntax_analysis === "passed") {
+    appendMessage(container, "muted", "No lexical or syntax errors.");
+  }
 }
 
-function renderTokens(tokens) {
+function renderTokens(tokens, statuses) {
   const rows = document.querySelector("#token-rows");
   rows.replaceChildren();
-  document.querySelector("#token-count").textContent = tokens.length;
+  document.querySelector("#token-count").textContent = `(${tokens.length})`;
   document.querySelector("#token-empty").hidden = tokens.length > 0;
+  if (statuses.lexical_analysis !== "passed") return;
   tokens.forEach((token) => {
     const row = document.createElement("tr");
     [token.type, String(token.value), token.line, token.column].forEach((value) => {
@@ -140,11 +215,14 @@ function renderTokens(tokens) {
   });
 }
 
-function renderAst(tree) {
+function renderAst(tree, statuses) {
   const container = document.querySelector("#ast-tree");
   container.replaceChildren();
   if (!tree) {
-    container.innerHTML = '<p class="muted">No AST: syntax analysis did not produce a valid statement.</p>';
+    const reason = statuses.syntax_analysis === "failed"
+      ? "NOT RUN — syntax analysis failed; no valid AST was constructed."
+      : "NOT RUN — lexical analysis failed; a complete token stream is unavailable.";
+    appendMessage(container, "muted", reason);
     return;
   }
   container.append(buildAstNode(tree));
@@ -187,8 +265,6 @@ function buildAstNode(value, key = null) {
       group.append(groupLabel);
       childValue.forEach((item) => group.append(buildAstNode(item)));
       wrapper.append(group);
-    } else if (childValue !== null && typeof childValue === "object") {
-      wrapper.append(buildAstNode(childValue, childKey));
     } else {
       wrapper.append(buildAstNode(childValue, childKey));
     }
@@ -196,21 +272,24 @@ function buildAstNode(value, key = null) {
   return wrapper;
 }
 
-function renderSemantics(semantic) {
+function renderSemantics(semantic, statuses) {
   const container = document.querySelector("#semantic-results");
   container.replaceChildren();
-  if (!semantic || semantic.valid === null) {
-    const skipped = document.createElement("p");
-    skipped.className = "muted";
-    skipped.textContent = "Semantic checks were not run because parsing failed.";
-    container.append(skipped);
+  if (statuses.semantic_analysis === "blocked" || semantic?.valid === null) {
+    appendMessage(
+      container,
+      "muted",
+      `NOT RUN — ${statuses.lexical_analysis !== "passed"
+        ? "lexical analysis failed."
+        : "syntax analysis failed; no valid AST is available."}`
+    );
     return;
   }
-  const valid = semantic && semantic.valid;
-  const summary = document.createElement("p");
-  summary.className = valid ? "semantic-good" : "semantic-bad";
-  summary.textContent = valid ? "✓ All referenced tables and columns are valid." : "✕ Semantic checks found issues.";
-  container.append(summary);
+  if (semantic?.valid) {
+    appendMessage(container, "semantic-good", "PASS — all referenced tables and columns are valid.");
+    return;
+  }
+  appendMessage(container, "semantic-bad", "ERROR — semantic validation failed.");
   (semantic?.errors || []).forEach((message) => {
     const item = document.createElement("div");
     item.className = "finding";
@@ -221,14 +300,20 @@ function renderSemantics(semantic) {
   });
 }
 
-function renderSecurity(findings) {
+function renderSecurity(findings, statuses) {
   const container = document.querySelector("#security-results");
   container.replaceChildren();
+  if (statuses.security_analysis !== "passed") {
+    appendMessage(
+      container,
+      "muted",
+      "NOT RUN — lexical analysis did not produce tokens for security checks."
+    );
+    return;
+  }
+  appendMessage(container, "semantic-good", "Security analysis completed.");
   if (!findings.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "No configured suspicious patterns were detected.";
-    container.append(empty);
+    appendMessage(container, "muted", "No configured suspicious patterns were detected.");
     return;
   }
   findings.forEach((finding) => {
@@ -243,20 +328,32 @@ function renderSecurity(findings) {
     explanation.textContent = finding.explanation;
     const recommendation = document.createElement("p");
     recommendation.className = "recommendation";
-    recommendation.textContent = `Recommendation: ${finding.recommendation}`;
+    recommendation.textContent = `Recommended fix: ${finding.recommendation}`;
     item.append(severity, title, explanation, recommendation);
     container.append(item);
   });
 }
 
-function renderRules(rules) {
+function renderRules(rules, statuses, semantic) {
   const container = document.querySelector("#optimization-results");
   container.replaceChildren();
+  if (statuses.optimization !== "passed") {
+    appendMessage(
+      container,
+      "muted",
+      `NOT RUN — ${getOptimizationBlockedMessage(statuses)}`
+    );
+    return;
+  }
+  appendMessage(container, "semantic-good", "Optimization completed on the validated AST.");
   if (!rules.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "No optimization rules were needed for this query.";
-    container.append(empty);
+    appendMessage(
+      container,
+      "muted",
+      semantic?.valid
+        ? "No optimization rules were needed."
+        : "No optimization rules were applied."
+    );
     return;
   }
   rules.forEach((rule) => {
@@ -269,4 +366,39 @@ function renderRules(rules) {
     item.append(title, explanation);
     container.append(item);
   });
+}
+
+function getOptimizationBlockedMessage(statuses) {
+  if (statuses.lexical_analysis !== "passed") {
+    return "lexical analysis failed, so no valid token stream or SQL syntax tree is available.";
+  }
+  if (statuses.syntax_analysis !== "passed") {
+    return "SQL syntax failed; optimization cannot run on an invalid AST.";
+  }
+  if (statuses.semantic_analysis !== "passed") {
+    return "semantic validation failed; optimized SQL cannot be presented as validated.";
+  }
+  return "the optimization stage did not complete.";
+}
+
+function renderSqlComparison(result, original, statuses) {
+  document.querySelector("#original-sql").textContent = original;
+  const optimized = document.querySelector("#optimized-sql");
+  const valid = statuses.semantic_analysis === "passed" &&
+    statuses.optimization === "passed" &&
+    result.optimized_sql !== null;
+  const card = optimized.closest(".optimized-result");
+  card.classList.toggle("withheld", !valid);
+  document.querySelector("#optimization-label").textContent =
+    valid ? "Optimized SQL · validated" : "Optimization not run";
+  optimized.textContent = valid
+    ? result.optimized_sql
+    : `NOT RUN — ${getOptimizationBlockedMessage(statuses)}`;
+}
+
+function appendMessage(container, className, message) {
+  const element = document.createElement("p");
+  element.className = className;
+  element.textContent = message;
+  container.append(element);
 }

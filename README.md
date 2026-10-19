@@ -1,6 +1,6 @@
 # SQL Query Security Analyzer and Optimizer
 
-A beginner-friendly Flask application demonstrating a real compiler pipeline for a deliberately small SQL dialect. SQL input is tokenized, parsed into an abstract syntax tree, checked against a sample schema, inspected for suspicious patterns, simplified on the AST, and generated back into readable SQL. **Queries are never sent to or executed by a database.**
+A beginner-friendly Flask application demonstrating a real compiler pipeline for a deliberately small SQL dialect. SQL input is tokenized, parsed into an abstract syntax tree, checked against a sample schema, inspected for suspicious patterns, simplified on the AST only after successful semantic validation, and generated back into readable SQL. **Queries are never sent to or executed by a database.**
 
 ## Requirements and setup (Windows PowerShell)
 
@@ -43,8 +43,8 @@ The parser supports `SELECT` with named columns or `*`, one table in `FROM`, opt
 - **Schema and semantic analyzer:** `analyzer/schema_catalog.py` contains the in-memory `users` and `orders` catalog; `analyzer/semantic_analyzer.py` checks table/column references and basic types.
 - **Security analyzer:** `analyzer/security_analyzer.py` reports suspicious tautologies, `SELECT *`, unfiltered `DELETE`/`UPDATE`, `DROP`, and multiple statements. Its findings are indicators for review, not proof of exploitability. Parameterized queries are the recommended defense against SQL injection in applications.
 - **Optimizer and SQL generator:** `analyzer/optimizer.py` applies boolean simplifications and safe duplicate-`AND` removal directly to the AST; `analyzer/sql_generator.py` emits normalized SQL.
-- **Pipeline and web API:** `analyzer/pipeline.py` coordinates stages; `app.py` provides the Flask page, `POST /api/analyze`, and `GET /api/health`.
-- **Frontend:** `templates/index.html`, `static/css/style.css`, and `static/js/app.js` implement the responsive dashboard and render actual API results.
+- **Pipeline and web API:** `analyzer/pipeline.py` coordinates stages, reports an overall status, keeps independently available security findings on syntax errors, and withholds optimization output when syntax or semantic validation fails; `app.py` provides the Flask page, `POST /api/analyze`, and `GET /api/health`.
+- **Frontend:** `templates/index.html`, `static/css/style.css`, and `static/js/app.js` implement the responsive dashboard. Example selection only fills the editor; analysis results appear together in one vertically scrollable report without category tabs.
 - **Tests:** `tests/` contains focused pytest coverage for the lexer, parser, semantic and security analysis, optimizer, and pipeline/API.
 
 ## API
