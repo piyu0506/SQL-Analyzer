@@ -79,6 +79,9 @@ def test_frontend_has_one_report_without_category_tabs():
                     "Security findings", "Optimization results",
                     "Original SQL versus optimized SQL"):
         assert section in html
+    for section in ("Create Manually", "Generate Random Schema",
+                    "Preview Random Schema", "Insert a record"):
+        assert section in html
     assert 'role="tab"' not in html
     assert "data-tab=" not in html
     assert 'id="example-query"' in html

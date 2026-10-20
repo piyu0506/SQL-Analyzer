@@ -4,24 +4,34 @@ from .ast_nodes import (
     BinaryExpression, Identifier, IsNullExpression, Literal, UnaryExpression,
     Wildcard,
 )
-from .schema_catalog import SCHEMA
+from .schema_catalog import get_current_schema
 
 
 NUMERIC_TYPES = {"INTEGER", "DECIMAL", "NUMBER"}
+STRING_TYPES = {"VARCHAR", "TEXT", "STRING"}
+
+
+def _types_are_compatible(left_type, right_type):
+    if left_type == right_type:
+        return True
+    if left_type in NUMERIC_TYPES and right_type in NUMERIC_TYPES:
+        return True
+    return left_type in STRING_TYPES and right_type in STRING_TYPES
 
 
 class SemanticAnalyzer:
     def __init__(self, schema=None):
-        self.schema = schema or SCHEMA
+        self.schema = get_current_schema() if schema is None else schema
         self.errors = []
 
     def analyze(self, statement):
         self.errors = []
         table_name = statement.table.lower()
-        if table_name not in self.schema:
+        normalized_schema = {key.lower(): value for key, value in self.schema.items()}
+        if table_name not in normalized_schema:
             self.errors.append(f"Unknown table '{statement.table}'.")
             return {"valid": False, "errors": self.errors}
-        columns = self.schema[table_name]
+        columns = normalized_schema[table_name]
         for selected in statement.columns:
             if isinstance(selected, Identifier):
                 self._check_column(selected, columns)
@@ -58,8 +68,7 @@ class SemanticAnalyzer:
                     self.errors.append(f"{expression.operator} requires boolean expressions.")
                 return "BOOLEAN"
             if (left_type and right_type and left_type != "NULL" and right_type != "NULL"
-                    and not (left_type in NUMERIC_TYPES and right_type in NUMERIC_TYPES)
-                    and left_type != right_type):
+                    and not _types_are_compatible(left_type, right_type)):
                 self.errors.append(
                     f"Type mismatch in comparison: {left_type} cannot be compared with {right_type}."
                 )
@@ -70,4 +79,5 @@ class SemanticAnalyzer:
 
 
 def analyze(statement, schema=None):
-    return SemanticAnalyzer(schema).analyze(statement)
+    resolved_schema = get_current_schema() if schema is None else schema
+    return SemanticAnalyzer(resolved_schema).analyze(statement)

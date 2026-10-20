@@ -21,3 +21,10 @@ def test_reports_basic_type_mismatch():
     result = analyze(parse(tokenize("SELECT id FROM users WHERE age = 'adult'")))
     assert not result["valid"]
     assert any("Type mismatch" in error for error in result["errors"])
+
+
+def test_accepts_text_columns_compared_with_string_literals():
+    result = analyze(parse(tokenize(
+        "SELECT username FROM users WHERE username = 'alice'"
+    )))
+    assert result == {"valid": True, "errors": []}

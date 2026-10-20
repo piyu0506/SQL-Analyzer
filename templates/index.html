@@ -24,13 +24,117 @@
       <p>Trace a query through the compiler pipeline. Inspect its tokens, syntax tree, schema checks, security signals and safe optimizations.</p>
     </section>
 
+    <section class="workspace-card database-card" aria-labelledby="database-heading">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">01 / DATABASE WORKSPACE</div>
+          <h2 id="database-heading">Manage the playground schema</h2>
+        </div>
+        <button class="button button-secondary" id="refresh-schema" type="button">Refresh Schema</button>
+      </div>
+      <div class="database-layout">
+        <aside class="db-sidebar">
+          <div class="db-actions">
+            <button class="button button-primary small-button" id="new-table-button" type="button">+ New table</button>
+            <button class="button button-secondary small-button" id="reset-workspace-button" type="button">Reset</button>
+          </div>
+          <ul id="table-list" class="table-list" aria-live="polite"></ul>
+        </aside>
+        <div class="db-content">
+          <section class="manual-mode" aria-labelledby="manual-mode-heading">
+            <div class="mode-heading">
+              <div>
+                <h3 id="manual-mode-heading">Option A · Create Manually</h3>
+                <p class="muted">Build a table, then enter and maintain its records.</p>
+              </div>
+            </div>
+            <form id="table-form">
+            <div class="field-row">
+              <label class="field-label" for="table-name-input">Table name</label>
+              <input id="table-name-input" type="text" placeholder="Students" />
+            </div>
+            <div class="field-row compact-row">
+              <button class="button button-secondary small-button" id="add-column-button" type="button">Add column</button>
+              <button class="button button-primary small-button" id="save-table-button" type="submit">Save table</button>
+              <button class="button button-secondary small-button danger-button" id="delete-table-button" type="button">Delete table</button>
+            </div>
+            <div id="column-builder" class="column-builder"></div>
+            </form>
+            <div class="data-tools">
+              <div class="field-row inline-row">
+                <label class="field-label" for="rows-per-table">Sample rows per table</label>
+                <input id="rows-per-table" type="number" min="1" max="50" value="10" />
+              </div>
+              <div class="db-actions compact-action-row">
+                <button class="button button-secondary small-button" id="generate-sample-data-button" type="button">Generate Sample Data</button>
+              </div>
+            </div>
+            <div class="record-editor">
+              <h3 id="record-form-heading">Insert a record</h3>
+              <form id="record-form"></form>
+            </div>
+            <div class="schema-preview">
+              <h3>Schema details</h3>
+              <pre id="schema-ddl" class="schema-pre"></pre>
+            </div>
+            <div class="preview-panel">
+              <h3 id="preview-title">Table preview and records</h3>
+              <div id="table-preview" class="table-preview"></div>
+            </div>
+          </section>
+
+          <section class="random-mode" aria-labelledby="random-mode-heading">
+            <div class="mode-heading">
+              <div>
+                <h3 id="random-mode-heading">Option B · Generate Random Schema</h3>
+                <p class="muted">Preview a themed schema before saving it to the same SQLite workspace.</p>
+              </div>
+            </div>
+            <div class="random-options">
+              <label>Theme
+                <select id="random-theme">
+                  <option value="university">University</option>
+                  <option value="e-commerce">E-commerce</option>
+                  <option value="library">Library</option>
+                  <option value="company">Company</option>
+                  <option value="hospital">Hospital</option>
+                  <option value="random">Random</option>
+                </select>
+              </label>
+              <label>Number of tables
+                <input id="random-table-count" type="number" min="1" max="10" value="4" />
+              </label>
+              <label>Columns per table
+                <input id="random-columns-count" type="number" min="2" max="12" value="5" />
+              </label>
+              <label>Workspace action
+                <select id="random-mode">
+                  <option value="add">Add to existing workspace</option>
+                  <option value="replace">Replace all existing tables</option>
+                </select>
+              </label>
+              <label class="check-option"><input id="random-relationships" type="checkbox" checked /> Create table relationships</label>
+              <label class="check-option"><input id="random-sample-data" type="checkbox" checked /> Generate sample records</label>
+              <label>Sample rows per table
+                <input id="random-rows-count" type="number" min="1" max="50" value="10" />
+              </label>
+              <button class="button button-primary small-button" id="preview-random-schema" type="button">Preview Random Schema</button>
+            </div>
+            <div id="random-schema-preview" class="random-schema-preview" aria-live="polite"></div>
+            <button class="button button-primary small-button" id="create-random-schema" type="button" disabled>Create Previewed Schema</button>
+          </section>
+          <p id="workspace-message" class="workspace-message" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
     <section class="workspace-card" aria-labelledby="editor-heading">
       <div class="section-heading">
         <div>
-          <div class="eyebrow">01 / QUERY INPUT</div>
+          <div class="eyebrow">02 / QUERY INPUT</div>
           <h2 id="editor-heading">Write a SQL query</h2>
         </div>
-        <span class="schema-hint">Sample schema: <b>users</b> · <b>orders</b></span>
+        <span class="schema-hint" id="active-schema-hint">Schema: loading…</span>
       </div>
       <div class="examples" aria-labelledby="examples-heading">
         <label id="examples-heading" for="example-query">Try an example</label>
@@ -52,15 +156,20 @@
           aria-describedby="editor-help"></textarea>
       </div>
       <div class="editor-footer">
-        <p id="editor-help">Read-only analysis · SQL is never executed against a database.</p>
+        <p id="editor-help">Analyze the compiler pipeline or run a supported SELECT against the local SQLite playground database.</p>
         <div class="editor-actions">
           <button class="button button-secondary" id="reset-button" type="button">Clear</button>
           <button class="button button-primary" id="analyze-button" type="button">
             <span class="button-icon" aria-hidden="true">▶</span> Analyze Query
           </button>
+          <button class="button button-secondary" id="run-query-button" type="button">Run Query</button>
         </div>
       </div>
       <p id="request-error" class="request-error" role="alert" hidden></p>
+      <section id="query-result-panel" class="query-result-panel" hidden aria-labelledby="query-result-heading">
+        <h3 id="query-result-heading">Executed query results</h3>
+        <div id="query-result-table" class="table-preview"></div>
+      </section>
     </section>
 
     <section class="results-card" aria-labelledby="results-heading">

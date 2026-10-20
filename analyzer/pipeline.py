@@ -3,12 +3,14 @@
 from .lexer import LexerError, tokenize
 from .optimizer import optimize
 from .parser import ParseError, parse
+from .schema_catalog import get_current_schema
 from .security_analyzer import analyze as analyze_security
 from .semantic_analyzer import analyze as analyze_semantics
 from .sql_generator import generate
 
 
 def analyze_query(query):
+    schema = get_current_schema()
     response = {
         "tokens": [],
         "parse_tree": None,
@@ -26,6 +28,7 @@ def analyze_query(query):
             "optimization": "pending",
         },
         "errors": {"lexical": None, "syntax": None, "semantic": []},
+        "schema": schema,
     }
     try:
         tokens = tokenize(query)
@@ -66,7 +69,7 @@ def analyze_query(query):
         response["overall_status"] = "syntax_error"
         return response
 
-    semantics = analyze_semantics(statement)
+    semantics = analyze_semantics(statement, schema=schema)
     response["semantic_analysis"] = semantics
     response["errors"]["semantic"] = semantics["errors"]
     response["pipeline_status"]["semantic_analysis"] = (

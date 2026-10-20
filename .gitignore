@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+playground.sqlite3
+playground.sqlite3-*
